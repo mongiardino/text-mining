@@ -2,13 +2,13 @@
 
 #Written by Nicolas Mongiardino Koch (Department of Geology & Geophysics, Yale University;
 #nicolas.mongiardinokoch@yale.edu) as supplementary material to the manuscipt "The phylogenomic
-#revolution and its conceptual innovations" (Organisms Diversity & Evolution). This project 
-#originated as a personal challenge to learn text mining. I am not an expert on the topic, and
-#it is very likely that there are easier ways to do everything that this script does. The code
-#not only provides a way to fully reproduce all web scraping and analyses, but it is intended 
-#to serve the purpose of a tutorial in mining and handling text in tidy ways. Hopefully this will
-#inspire other researchers to consider the article's text as data itself, its contents as evidence
-#of the evolution of scientific disciplines.
+#revolution and its conceptual innovations: a text mining approach" (Organisms Diversity & Evolution).
+#This project originated as a personal challenge to learn text mining. I am not an expert on
+#the topic, and it is very likely that there are easier ways to do everything that this script
+#does. The code not only provides a way to fully reproduce all web scraping and analyses, but
+#is intended to serve the purpose of a tutorial in mining and handling of text in tidy ways.
+#Hopefully this will inspire other researchers to consider the article's text as data itself,
+#its contents as evidence of the evolution of scientific disciplines.
 
 #Although all of the scraping can possibly be done with just one approach, 3 different methods are
 #used (R packages 'rvest' and 'RSelenium', as well as the program PhantomJS). Hopefully this will
@@ -21,15 +21,15 @@
 
 #As a discipline changes and matures, the type of results and topics covered by different journals
 #change as well. To incorporate as much diversity as possible 6 different journals were scraped.
-#Four of these are journals specialized in phylogenetics and molecular biology, in which many of
+#Four of these are journals specialize in phylogenetics and molecular biology, in which many of
 #of the seminal papers in phylogenomics were published, thus having a strong influence on the field.
-#The remaining two are journals that cover topics across the biological sciences, these increased the
+#The remaining two are journals that cover topics across the biological sciences; these increased the
 #output of papers in phylogenomics as the methods became more mainstream. In all cases, searches 
 #were restricted to research articles.
 
 #Online content is dynamic, so it should be pointed out that subsequent analyses might not recover
 #the exact same results (although big differences are also not expected). The raw data used to obtain
-#the results are therefore also included as supplementary data.
+#the results are therefore also included as supplementary data (.Rda files).
 
 #Sistematic Biology was mined on January 29, 2018
 #Molecular Biology and Evolution was mined on January 29, 2018
@@ -69,19 +69,22 @@ library(RColorBrewer)
 #Other text handling
 library(SnowballC)
 
+
 #Mining Plos One required using software PhantomJS, please download the program (execute the line below to
 #go to the website and place the .exe file on your working directory
 browseURL('http://phantomjs.org/')
 
-###Mining Systematic Biology---------------------------------------------------------------------
+#######Part 1: WEB SCRAPING------------------------------------------------------------------------------
+
+###Systematic Biology----------------------------------------------------------------------------
 
 #url for search of research articles in Systematic Biology with 'phylogenomics' in the Full Text
 url = 'https://academic.oup.com/sysbio/search-results?page=1&f_ContentType=Journal+Article&f_ArticleTypeDisplayName=Research+Article&fl_SiteID=5349&qb=%7b%22FullText1%22%3a%22phylogenomics%22%7d&sort=Date+%E2%80%93+Oldest+First'
 #Reading the HTML code from the website
 systbiol_webpage = read_html(url)
 
-#Setting some variables (empty vectors to store dois and publication dates, we are on page 1,
-#there are more results on other pages, and we are going to modify the url by detecting the numbers in it)
+#Setting some initial variables (empty vectors to store dois and publication dates, setting current page to 1,
+#there are more results on other pages, and a vector of numbers used below to search and modify the url)
 systbiol_doi = c()
 systbiol_pubdates = c()
 page = 1
@@ -90,12 +93,18 @@ which.page = c(0:9)
 
 #The following will loop through all the pages of the query and extract the doi of the articles
 while(more.results == T) {
+  
+  #The function html_nodes will extract a specific piece of the full HTML document that we previously
+  #downloaded. In this case, '.al-citation-list a' is the entirety of doi links shown in the search page,
+  #and '.al-pub-date' is the list of all publication dates. These are known as CSS selectors, and were 
+  #identifies using SelectorGadget. The function html_text in turn extract the text from the specified node,
+  #instead of other attributes it might have, such as links to other websites.
   systbiol_doi = c(systbiol_doi,html_text(html_nodes(systbiol_webpage,'.al-citation-list a')))
   systbiol_pubdates = c(systbiol_pubdates,html_text(html_nodes(systbiol_webpage,'.al-pub-date')))
   
-  #Move to next page
+  #Move to next page by modifying the text in object url
   page = page + 1
-  num_in_url = which(strsplit(url,'')[[1]] %in% which.page) #find all the numbers in url
+  num_in_url = which(strsplit(url,'')[[1]] %in% which.page) #find all the numbers in the url
   if(num_in_url[2] != num_in_url[1] + 1) { #if we are in pages < 10
     url = paste(substr(url,1,(num_in_url[1]-1)),page,substr(url,(num_in_url[1]+1),str_length(url)),sep='')
   }  else { #if we are in pages > 10
@@ -108,7 +117,7 @@ while(more.results == T) {
   }
 }
 
-#Store only the years
+#For the publication dates, store only the year
 for(i in 1:length(systbiol_pubdates)) {
   systbiol_pubdates[i] = strsplit(systbiol_pubdates[i], ' ')[[1]][4]
 }
@@ -119,7 +128,7 @@ systbiol_pubdates = as.numeric(systbiol_pubdates)
 systbiol_doi = systbiol_doi[-c(1,299,which(systbiol_pubdates >= 2018))]
 systbiol_pubdates = systbiol_pubdates[-c(1,299,which(systbiol_pubdates >= 2018))]
 
-#Scraping titles and main text
+#Move on to scraping the titles and main texts
 systbiol_articles = vector("list", length(systbiol_doi))
 systbiol_titles = vector("list", length(systbiol_doi))
 
@@ -130,7 +139,7 @@ for(i in 1:length(systbiol_doi)) {
   systbiol_titles[i] = html_text(html_nodes(systbiol_webpage,'.article-title-main'))
 }
 
-#articles 258 & 269 are announcements although weren't tagged as such
+#Articles 258 & 269 are announcements although weren't tagged as such
 #17,61,117 & 277 are symposium introductions
 systbiol_articles = systbiol_articles[-c(17,61,117,258,269,277)]
 systbiol_doi = systbiol_doi[-c(17,61,117,258,269,277)]
@@ -141,18 +150,25 @@ systbiol_titles = systbiol_titles[-c(17,61,117,258,269,277)]
 save(systbiol_articles, file = 'systbiol_articles.Rda')
 
 #This contains acknowledgments, appendices, section titles and captions, which we are going to (try to) eliminate
-#We'll do so by finding the first word that is usually present right after the main text ended,
+#We'll do so by finding the first word that is usually present right after the main text ends,
 #and eliminate everything that is after it. We'll also eliminate paragraphs of length < 50 words, as the majority
 #of these are figure and table captions
-stopwords = c('Acknowledgment','Aknowledgements','Acknowledgments','ACKNOWLEDGMENTS','Acknowledgements','AcknowledgmentS','acknowledgment','ACKNOWLEDGEMENTS','A cknowledgments','SUPPLEMENTARY MATERIAL','FUNDING','Funding','S UPPLEMENTARY M ATERIAL','Supplementary Material','S upplementary M aterial','A cknowledgements','S oftware availablity')
+stopwords = c('Acknowledgment','Aknowledgements','Acknowledgments','ACKNOWLEDGMENTS','Acknowledgements','AcknowledgmentS',
+              'acknowledgment','ACKNOWLEDGEMENTS','A cknowledgments','SUPPLEMENTARY MATERIAL','FUNDING','Funding',
+              'S UPPLEMENTARY M ATERIAL','Supplementary Material','S upplementary M aterial','A cknowledgements','S oftware availablity')
 
 for(i in 1:length(systbiol_articles)) {
   to.eliminate = c()
   for(j in 1:length(systbiol_articles[[i]])) {
-    if(systbiol_articles[[i]][j] %in% stopwords || paste(unlist(strsplit(systbiol_articles[[i]][j], ' '))[1:3], collapse = ' ') == 'Data available from' || paste(unlist(strsplit(systbiol_articles[[i]][j], ' '))[1:2], collapse = ' ') == 'Supplementary material') {
+    #if you found the end of the article
+    if(systbiol_articles[[i]][j] %in% stopwords || 
+       paste(unlist(strsplit(systbiol_articles[[i]][j], ' '))[1:3], collapse = ' ') == 'Data available from' || 
+       paste(unlist(strsplit(systbiol_articles[[i]][j], ' '))[1:2], collapse = ' ') == 'Supplementary material') {
+      #eliminate everything that comes after it and move on to the next
       systbiol_articles[[i]] = systbiol_articles[[i]][-c(j:length(systbiol_articles[[i]]))]
       break
     } else {
+      #also save a vector of the location of small paragraphs and eliminate them at the end
       if(length(strsplit(systbiol_articles[[i]][j], ' ')[[1]]) < 50) {
         to.eliminate = c(to.eliminate,j)
       }
@@ -162,11 +178,13 @@ for(i in 1:length(systbiol_articles)) {
 }
 
 #Two articles did not match any stopping word, and so I am eliminating the ackowledgments by hand
-#(which are just the last paragraph of each of those articles)
+#(which for these two are just the last paragraphs of each)
 systbiol_articles[[12]] = systbiol_articles[[12]][-length(systbiol_articles[[12]])]
 systbiol_articles[[46]] = systbiol_articles[[46]][-length(systbiol_articles[[46]])]
 
 #Some articles include author, title, volume, issue, doi, etc as first paragraph, we'll remove them
+#All of these have the journal's name in the first paragraph as well, so we are going to delete the first
+#paragraph if we detect the journal's name in it
 for(i in 1:length(systbiol_articles)) {
   if(str_detect(systbiol_articles[[i]][1], 'Systematic Biology')) {
     systbiol_articles[[i]] = systbiol_articles[[i]][-1]
@@ -181,7 +199,6 @@ systbiol_titles = gsub("[\r\n]", "", systbiol_titles)
 for(i in 1:length(systbiol_articles)) {
   systbiol_articles[[i]] = paste(unlist(systbiol_articles[[i]]), sep = ' ', collapse = '')
 }
-
 systbiol_articles = unlist(systbiol_articles)
 
 #That was a lot of work, let's combine everything and save it
@@ -190,12 +207,12 @@ save(systbiol, file="systbiol.Rda")
 
 ###Mining Molecular Biology and Evolution----------------------------------------------------
 
+#If code is not commented, it is doing the same thing that was already explained before
 #url for search of research articles in Molecular Biology and Evolution with 'phylogenomics' in the Full Text
 rm(list = ls())
 url = 'https://academic.oup.com/mbe/search-results?page=1&f_ContentType=Journal+Article&f_ArticleTypeDisplayName=Research+Article&fl_SiteID=5325&qb=%7b%22FullText1%22%3a%22phylogenomics%22%7d&sort=Date+%E2%80%93+Oldest+First'
 molbiolevol_webpage = read_html(url)
 
-#If code is not commented, it is doing the same thing that was already explained before (like the following chunk)
 molbiolevol_doi = c()
 molbiolevol_pubdates = c()
 page = 1
@@ -267,8 +284,9 @@ while(i <= length(molbiolevol_articles)) {
   }
   
   molbiolevol_articles[[i]] = molbiolevol_articles[[i]][-to.eliminate]
+  #Some articles are not available, these can be easily eliminated because they are really short
+  #(less than 10 paragraphs). We'll save the list of eliminated articles for later.
   if(length(molbiolevol_articles[[i]]) <= 10) {
-    #Some articles are not available, these can be easily eliminated because they are really short
     molbiolevol_articles = molbiolevol_articles[-i]
     eliminated = c(eliminated,i)
   } else {
@@ -279,6 +297,7 @@ while(i <= length(molbiolevol_articles)) {
 #21 articles didn't match these patterns, we'll eliminate them by hand.
 #Fortunately we only have to eliminate the last paragraph in each of these
 #We will also remove the first paragraph for those in which it represents author, title, etc.
+#For this we'll rely again on detecting the name of the journal.
 exceptions = c(13,15,19,23,25,27,31,46,48,55,59,64,65,66,75,88,130,143,161,198,251)
 for(i in 1:length(molbiolevol_articles)) {
   if(str_detect(molbiolevol_articles[[i]][1], 'Molecular Biology and Evolution')) {
@@ -302,30 +321,37 @@ for(i in 1:length(molbiolevol_articles)) {
 molbiolevol_articles = unlist(molbiolevol_articles)
 molbiolevol_titles = unlist(molbiolevol_titles)
 
-molbiolevol = data.frame(Year = molbiolevol_pubdates, Link = molbiolevol_doi, Title = molbiolevol_titles, Article = molbiolevol_articles)
+molbiolevol = data.frame(Year = molbiolevol_pubdates, Link = molbiolevol_doi, Title = molbiolevol_titles,
+                         Article = molbiolevol_articles)
 save(molbiolevol, file="molbiolevol.Rda")
 
-###Mining Plos One----------------------------------------------------
-#Plos website seems to load an empty website after a query, and only load the results of it later.
+###Mining PLoS One----------------------------------------------------
+#Plos website seems to load an empty website after a query, and only load the results of it a little bit later.
 #If mining is done with rvest, no results are found. Therefore, I used PhantomJS using a script that downloads
 #the complete website after waiting a few seconds
 rm(list = ls())
 
-#Search for research articles in Plos One with 'phylogenomics' in the Body from 2010 to 2017
+#Search for research articles in Plos One with 'phylogenomics' in the Body from 2000 to 2017
 url = 'http://journals.plos.org/plosone/search?filterJournals=PLoSONE&filterArticleTypes=Research+Article&filterSections=Body&filterStartDate=2000-01-01&filterEndDate=2017-12-31&q=phylogenomics&page=1'
 plos_doi = c()
 plos_pubdates = c()
 
 #The following will create a file with instructions for PhantomJS to download each of the
-#pages with results of our search, then read that file and extract what we are interested in
+#pages from our search. After downloading it, it will read that file and extract what we are interested in
 cat("var url ='http://journals.plos.org/plosone/search?filterJournals=PLoSONE&filterArticleTypes=Research+Article&filterSections=Body&filterStartDate=2000-01-01&filterEndDate=2017-12-31&q=phylogenomics&page=1';", "var page = new WebPage()", "var fs = require('fs');", "page.open(url, function (status) {", "        just_wait();", "});", "function just_wait() {", "    setTimeout(function() {", "               fs.write('1.html', page.content, 'w');", "            phantom.exit();", "    }, 15000);", "}", file="webscrape.js",sep="\n")
+#We'll save the file in R as well
 lines = readLines("webscrape.js")
+
+#PhantomJS will download the webpage as file 1.html
 system("phantomjs webscrape.js")
+
+#And we can then read it and extract the information we are interested in
 plos_webpage = read_html("1.html")
 plos_doi = c(plos_doi,html_text(html_nodes(plos_webpage,'.search-results-doi a')))
 plos_pubdates = c(plos_pubdates,html_text(html_nodes(plos_webpage,'.search-results-authors+ p')))
 max.page = as.numeric(last(html_text(html_nodes(plos_webpage,'.text-color'))))
 
+#This loop will modify the script used with PhantomJS and run it so that it moves through the search pages
 for(i in 2:max.page) {
   if(i < 11) {
     url = paste(substr(url,1,(str_length(url)-1)),i,sep='')
@@ -350,7 +376,7 @@ plos_pubdates = as.numeric(plos_pubdates)
 plos_articles = vector("list", length(plos_doi))
 plos_titles = vector("list", length(plos_doi))
 
-#Mine the articles
+#Scrape the articles
 for(i in 1:length(plos_doi)) {
   url = plos_doi[i]
   plos_webpage = read_html(url)
@@ -363,7 +389,6 @@ save(plos_articles, file="plos_articles.Rda")
 #Plos One has a highly standardized format, so if there is an acknowledgment and an author contribution
 #section, these are always the last 2 paragraphs. Even if either one of these are missing, the last two paragraphs
 #are never part of the main text, so we are safe to eliminate them for all
-
 for(i in 1:length(plos_articles)) {
   to.eliminate = c()
   nparagraph = length(plos_articles[[i]])
@@ -403,6 +428,8 @@ molphyloevol_pubdates = c()
 page = 0
 more.results = T
 while(more.results == T) {
+  #Here the function html_attr will extract the website adress, rather the the text (as we've been doing with html_text)
+  #that forms part of our CSS selector.
   molphyloevol_link = c(molphyloevol_link,paste('https://www.sciencedirect.com', html_attr(html_nodes(molphyloevol_webpage, '.text-s'), 'href')[-c(1:2)], sep = ''))
   molphyloevol_pubdates = c(molphyloevol_pubdates,html_text(html_nodes(molphyloevol_webpage, '.SubType')))
   
@@ -423,8 +450,8 @@ while(more.results == T) {
 }
 
 #some pubdates have issue number, others don't, but the year is always the previous to last object
-#after separating by commas. Some were in press (and other might be when you run this),
-#but they will be easy to recognize as they will be NAs after this.
+#after separating by commas. Some were in press (and other might be when you run this!),
+#but they will be easy to recognize as they will be NAs after running this loop.
 for(i in 1:length(molphyloevol_pubdates)) {
   cut = strsplit(molphyloevol_pubdates[i], ', ')
   cut = cut[[1]][length(cut[[1]])-1]
@@ -432,6 +459,7 @@ for(i in 1:length(molphyloevol_pubdates)) {
 }
 molphyloevol_pubdates = as.numeric(molphyloevol_pubdates)
 
+#Delete articles in press and thos from 2018 onwards
 molphyloevol_link = molphyloevol_link[-c(which(molphyloevol_pubdates >= 2018), which(is.na(molphyloevol_pubdates)))]
 molphyloevol_pubdates = molphyloevol_pubdates[-c(which(molphyloevol_pubdates >= 2018), which(is.na(molphyloevol_pubdates)))]
 
@@ -445,15 +473,16 @@ i = 1
 
 #More or less randomly, RSelenium will not wait until the article is fully loaded before scraping it.
 #I am both setting an explicitly waiting time, and I am also asking it to retry until it gets the full
-#article. Depending on your internet connection one of the two might be sufficient
+#article. Depending on your internet connection one of the two might be sufficient.
 while(i <= length(molphyloevol_link)) {
   #navigate to the page
   remDr$navigate(molphyloevol_link[i])
   #wait a little bit
   Sys.sleep(5)
-  #get the page html
+  #read the page html
   molphyloevol_webpage = read_html(remDr$getPageSource()[[1]])
-  #There seems to be two different structures in which papers were organized
+  #There seems to be two different structures in which papers were organized. This will recognize each
+  #format and scrape accordingly
   if(identical(html_text(html_nodes(molphyloevol_webpage,'.title-text')), character(0))) {
     molphyloevol_articles[[i]] = html_text(html_nodes(molphyloevol_webpage,'.svArticle , #frag_2 p'))
     molphyloevol_titles[i] = html_text(html_nodes(molphyloevol_webpage,'.svTitle'))
@@ -462,12 +491,12 @@ while(i <= length(molphyloevol_link)) {
     molphyloevol_titles[i] = html_text(html_nodes(molphyloevol_webpage,'.title-text'))
   }
   if(length(molphyloevol_articles[[i]]) > 20) {
-    #If you have it all, then move to the next when
+    #If you have it all, then move to the next one; otherwise retry
     i = i + 1
   }
 }
 
-#Don't pay attention to the errors, titles were scraped correctly
+#Don't pay attention to the errors popping up, titles were scraped correctly
 #Let's close the browser, stop the selenium server and save the articles
 remDr$close()
 rD[["server"]]$stop()
@@ -489,8 +518,6 @@ for(i in 1:length(molphyloevol_articles)) {
   molphyloevol_articles[[i]] = molphyloevol_articles[[i]][-to.eliminate]
 }
 
-molphyloevol_articles_backup = molphyloevol_articles
-
 for(i in 1:length(molphyloevol_articles)) {
   molphyloevol_articles[[i]] = paste(unlist(molphyloevol_articles[[i]]), sep = ' ', collapse = '')
 }
@@ -498,7 +525,8 @@ for(i in 1:length(molphyloevol_articles)) {
 molphyloevol_articles = unlist(molphyloevol_articles)
 molphyloevol_titles = unlist(molphyloevol_titles)
 
-molphyloevol = data.frame(Year = molphyloevol_pubdates, Link = molphyloevol_link, Title = molphyloevol_titles, Article = molphyloevol_articles)
+molphyloevol = data.frame(Year = molphyloevol_pubdates, Link = molphyloevol_link, Title = molphyloevol_titles, 
+                          Article = molphyloevol_articles)
 save(molphyloevol, file="molphyloevol.Rda")
 
 ###Mining Genome Biology and Evolution------------------------------------------------------------
@@ -540,6 +568,7 @@ for(i in 1:length(genomebiolevol_pubdates)) {
 }
 genomebiolevol_pubdates = as.numeric(genomebiolevol_pubdates)
 
+#Remove articles from 2018 or younger
 genomebiolevol_doi = genomebiolevol_doi[-c(which(genomebiolevol_pubdates >= 2018))]
 genomebiolevol_pubdates = genomebiolevol_pubdates[-c(which(genomebiolevol_pubdates >= 2018))]
 
@@ -547,7 +576,7 @@ genomebiolevol_pubdates = genomebiolevol_pubdates[-c(which(genomebiolevol_pubdat
 genomebiolevol_articles = vector("list", length(genomebiolevol_doi))
 genomebiolevol_titles = vector("list", length(genomebiolevol_doi))
 
-#Some from 2017 weren't available still, so we'll have to eliminate them
+#Some from 2017 weren't available still, so we'll have to eliminate them (they should be available now however..)
 eliminated = c() 
 
 for(i in 1:length(genomebiolevol_doi)) {
@@ -609,13 +638,14 @@ for(i in 1:length(genomebiolevol_articles)) {
 
 genomebiolevol_articles = unlist(genomebiolevol_articles)
 
-genomebiolevol = data.frame(Year = genomebiolevol_pubdates, Link = genomebiolevol_doi, Title = genomebiolevol_titles, Article = genomebiolevol_articles)
+genomebiolevol = data.frame(Year = genomebiolevol_pubdates, Link = genomebiolevol_doi, Title = genomebiolevol_titles, 
+                            Article = genomebiolevol_articles)
 save(genomebiolevol, file="genomebiolevol.Rda")
 
 ###Mining Proceedings B------------------------------------------------------------
 rm(list = ls())
 
-#url for search of research articles in Proceedings B with 'phylogenomics' up to 2017
+#url for search of research articles in Proceedings B with 'phylogenomics' up to (and including) 2017
 url = 'http://rspb.royalsocietypublishing.org/search/phylogenomics%20jcode%3Aroyprsb%20limit_to%3A2017-12-31%20numresults%3A10%20sort%3Apublication-date%20direction%3Aascending%20format_result%3Astandard?page=0'
 #Reading the HTML code from the website
 procb_webpage = read_html(url)
@@ -668,8 +698,8 @@ for(i in 1:length(procb_link)) {
   }
 }
 
-#Another one wans't available either, but we scraped tha abstract so it did not show up before.
-#Another one is an editorial. These are the two shortest articles.
+#Another one wans't available either, but we scraped the abstract so it did not show up before.
+#Another one is an editorial. These are the only two really short articles.
 for(i in 1:length(procb_link)) {
   if(length(strsplit(procb_articles[[i]], ' ')[[1]]) < 2000) {
     to.eliminate = c(to.eliminate, i)
@@ -683,7 +713,8 @@ procb_titles = procb_titles[-to.eliminate]
 
 save(procb_articles, file = 'procb_articles.Rda')
 
-stopwords = c('Acknowledgments', 'Data accessibility', 'Funding statement', 'Ethics', "Authors' contributions", 'Competing interests', 'Funding', 'References')
+stopwords = c('Acknowledgments', 'Data accessibility', 'Funding statement', 'Ethics', "Authors' contributions", 
+              'Competing interests', 'Funding', 'References')
 
 for(i in 1:length(procb_articles)) {
   lengths = rep(0, length(stopwords))
@@ -699,7 +730,10 @@ procb_titles = unlist(procb_titles)
 procb = data.frame(Year = procb_pubdates, Link = procb_link, Title = procb_titles, Article = procb_articles)
 save(procb, file="procb.Rda")
 
-###Analyses-------------------------------------------------------------------------------------
+#######Part 2: TEXT MINING------------------------------------------------------------------------------
+
+###Text handling and analyses---------------------------------------------------------------------------
+
 rm(list=ls())
 
 #If you are starting here, set the working directory to the folder containing the supplementary files of the paper
@@ -720,12 +754,12 @@ all_articles = as.tibble(rbind(systbiol, molbiolevol, plos, molphyloevol, genome
   add_column(Journal = c(rep('Systematic Biology', nrow(systbiol)), rep('Molecular Biology and Evolution', nrow(molbiolevol)), rep('Plos One', nrow(plos)), rep('Molecular Phylogenetics and Evolution', nrow(molphyloevol)), rep('Genome Biology and Evolution', nrow(genomebiolevol)), rep('Proceedings of the Royal Society B', nrow(procb)))) %>%
   mutate(Journal = as.factor(Journal)) %>% dplyr::select(Year, Journal, everything()) %>% arrange(Year)
 
-#Plot of papers by journal through time
+#Plot papers by journal through time (Fig. S1)
 ggplot(data = all_articles, mapping = aes(x = Year, fill = Journal)) + 
   geom_bar() + labs(y = 'Number of publications')
 
-#Eliminate everything in parenthesis (mostly just citations) and everything in square brackets (citation format for
-#Plos One), as well as all numbers. Just to leave things clean, let's also remove all double spaces we introduced in the
+#Eliminate everything in parentheses (mostly just citations) and everything in square brackets (citation format for
+#PLoS One), as well as all numbers. Just to leave things clean, let's also remove all double spaces we introduced in the
 #process (although this is not really needed). Also, remove hanging periods and minuses that are left from removing numbers.
 all_articles = all_articles %>% mutate(Article = gsub('\\([^\\)]+\\)', '', Article)) %>%
   mutate(Article = gsub('\\[[^]]+]', ' ', Article)) %>% mutate(Article = gsub('[0-9]', '', Article)) %>%
@@ -748,7 +782,6 @@ total_words = vector(length = length(years_covered))
 for(i in 1:length(years_covered)) {
   total_words[i] = nrow(all_words %>% filter(Year == years_covered[i]))
 }
-
 total_count = tibble(Year = years_covered, Total = total_words)
 
 #... and plot it
@@ -758,10 +791,10 @@ ggplot(total_count, aes(Year, Total)) + geom_point() + geom_smooth() + labs(x = 
 freq_per_year_stem = freq_per_year_stem %>% left_join(total_count, by = 'Year') %>%
   mutate(freq = n/Total) %>% dplyr::select(-Total)
 
-#Let's also summarize per article
+#Let's also summarize per article (might be useful..)
 freq_per_article_stem = all_words %>% count(Stems, Link)
 
-#This contains lots of symbols, mispelling errors, as well as words used very sporadically
+#This contains lots of symbols, mispellings, as well as words used very sporadically
 #We can get rid of all of these by keeping only those found in more than 2/3 of the covered years,
 #as well as more than 10% of total articles.
 #Having many observations will also make inferences on temporal dynamics more robust
@@ -780,39 +813,43 @@ while(pos <= length(all_unique_stems)) {
   }
 }
 
+#Filter the datasets to retain only stems that fulfill those requirements
 freq_per_year_stem = freq_per_year_stem %>% filter(Stems %in% all_unique_stems)
 freq_per_article_stem = freq_per_article_stem %>% filter(Stems %in% all_unique_stems)
 
-#Add ceros for the years with no mentions and save
+#Add ceros for the years with no mentions (very straightforward with function complete) and save
 freq_per_year_stem = freq_per_year_stem %>% complete(Stems, Year, fill = list(n = 0, freq = 0)) %>% arrange(Stems, Year)
 freq_per_article_stem = freq_per_article_stem %>% complete(Stems, Link, fill = list(n = 0)) %>% arrange(Stems, Link)
-
 save(freq_per_year_stem, file="freq_per_year_stem.Rda")
 
-#Check for correlation with year and exctract the top 100 words with the highest positive
-#correlation with time. Save the p-values and the correlation coefficients
+#Check for correlation with time.
+#Save the p-values and the correlation coefficients.
 word = pval = rho = vector(length = length(all_unique_stems))
 for(i in 1:length(all_unique_stems)) {
-  cor = cor.test(as.numeric(unlist(freq_per_year_stem[freq_per_year_stem[,1] == all_unique_stems[i],2])), as.numeric(unlist(freq_per_year_stem[freq_per_year_stem[,1] == all_unique_stems[i],4])), method = 'spearman', exact = F)
+  cor = cor.test(as.numeric(unlist(freq_per_year_stem[freq_per_year_stem[,1] == all_unique_stems[i],2])), 
+                 as.numeric(unlist(freq_per_year_stem[freq_per_year_stem[,1] == all_unique_stems[i],4])), 
+                 method = 'spearman', exact = F)
   word[i] = all_unique_stems[i]
   pval[i] = cor$p.value
   rho[i] = cor$estimate
 }
 
+#Put it all in a tibble and order it by decreasing correlation coefficient
 correlations_stem = data_frame(Word = word, Correlation = rho, Pvalue = pval) %>% arrange(desc(Correlation))
 
 #188 words can be considered to have a significant positive trend with time
-#after adjusting for multiple comparisons (and 36 a significant negative correlation)
+#after adjusting for multiple comparisons (a further 36 show a significant negative correlation)
 which(p.adjust(unlist((correlations_stem)$Pvalue), method = 'BH') < 0.05)
 
 #Let's just focus on the ones with a significant positive correlation
 strong_correlations_stem = correlations_stem %>% slice(1:188)
 
-#These are the top words
-print(strong_correlations_stem, n = 100)
+#Print them and save them for later analyses
+print(strong_correlations_stem, n = 188)
 reduced_stems = freq_per_year_stem %>% filter(Stems %in% strong_correlations_stem$Word)
-  
-#What words are feading into these stems?
+
+#For each stem, also find the words are feading into them (i.e., the inflected variants in which
+#shape they show up in the articles). We will save them in the named list 'words'
 correlated_stems = unique(strong_correlations_stem$Word)
 words = list()
 total = vector(length = length(correlated_stems))
@@ -830,11 +867,11 @@ replicates = 100
 boot_words = vector(length = length(years_covered))
 
 for(i in 1:replicates) {
-  #Let's start by performing resampling articles with replacement
+  #Let's start by resampling articles with replacement
   boot_repl = all_articles %>% sample_frac(size = 1, replace = T) %>% unnest_tokens(Words, Article) %>%
     anti_join(stop_words, by = c('Words' = 'word')) %>% mutate(Stems = wordStem(Words)) %>% count(Stems, Year)
   
-  #Calculate the total number of words in the bootstraped replicate
+  #Calculate the total number of words in the bootstrapped pseudoreplicate
   for(j in 1:length(years_covered)) {
     boot_words[j] = nrow(boot_repl %>% filter(Year == years_covered[j]))
   }
@@ -862,14 +899,19 @@ for(i in 1:replicates) {
 bootstrap_articles = bootstrap_articles %>% mutate_all(funs(replace(., is.na(.), 0)))
 save(bootstrap_articles, file='boot.Rda')
 
-#Calculate standard errors using the bootstrap replicates
+#Calculate standard errors. Given the format of the object this requires operations by row. The tidyverse
+#offers intuitive and fast ways of performing operations by columns, but doesn't work that well with rows.
+#Just to show how this can be done anyways, here is a way of doing it with tidy functions, but this is 
+#unnecessarily slow...
 boot_sd = bootstrap_articles %>% select(starts_with('repl')) %>% rowwise() %>% 
   do(data.frame(., stdev = sd(unlist(.[str_c('repl.', c(1:replicates))])))) %>% select(stdev)
 
 reduced_stems = reduced_stems %>% mutate(se = unlist(boot_sd, use.names = F)/sqrt(nrow(all_articles)))
 
-#Plot-------------------------------------------------------------------------------------------
-#Generate the labels, including the stem and the three most common uses of it 
+#Plotting the results-----------------------------------------------------------------------------------
+
+#For the three focus stems, generate the labels for the plot,
+#including the stem and the three most common uses of it 
 interesting_words = c('discord', 'suscept', 'discrimin')
 labels = vector(length = length(interesting_words))
 for(i in 1:length(interesting_words)) {
@@ -889,7 +931,7 @@ labels = str_replace(labels, '/]', ']')
 labels = str_replace(labels, '//', '/')
 
 #Recreate Fig. 1, using cubic regression splines to show the trend and +- 1 standard error as
-#estimated using article bootstraping
+#estimated using article bootstrapping
 reduced_stems %>% filter(Stems %in% interesting_words) %>% mutate_if(is.character, as.factor) %>% 
   ggplot(aes(x=Year, y=freq, color=Stems, group=Stems)) + geom_point() + 
   geom_smooth(size = 2, method = 'lm', formula = y ~ splines::bs(x, 3), alpha = 0.1, se = F) +
@@ -915,17 +957,17 @@ for(i in 1:length(interesting_words)) {
 }
 
 #You can modify this to have R print to the console a sample of sentences containing any of the words
-#from the list of the top 100 (in this case we are using the stem 'trim' as example)
+#from the list of the significantly trending stems (in this case, we are using the stem 'trim' as example)
 words_to_search = words[names(words) == 'trim']
 cat(unlist(all_sentences %>% select(Sentences) %>% 
     filter(str_detect(Sentences, paste(names(unlist(unname(words_to_search))), collapse = '|'))) %>% 
     mutate(Sentences = paste(Sentences, '\n')) %>% sample_n(size = 100), use.names = F))
 
-###Concluding remarks---------------------------------------------------------------------------------------------
+###Some concluding remarks---------------------------------------------------------------------------------------------
 
 #Although some of the words selected are used almost exclusively in the sense expressed in the
 #manuscript (e.g., 'discordance' refering to differences in topology obtained from different 
-#data sources) others are used in many different ways.
+#data sources) others are used in different ways with different meanings.
 #However, from the total number of sentences using the stem 'discrim' to express whether molecular
 #data is strong enough to favor specific topologies, models or evolutionary scenarios, over 2/3 use it
 #to express the inability to discriminate. 'suscept' is also used to express suceptibility rather
@@ -933,4 +975,4 @@ cat(unlist(all_sentences %>% select(Sentences) %>%
 #'not suscepible' and 'not be susceptible' only occur once each, while 'is susceptible' and 
 #'are suceptible' occur 42 times, and other bigrams such as 'highly susceptible' (17 times) and
 #'particularly suceptible' (12 times) are also common). It is therefore valid to interpret an increase
-#in the number of times these words are used as done in the paper.
+#in the frequency of use of these three words (i.e., those in Fig. 1) as is done in the paper.
